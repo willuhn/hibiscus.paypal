@@ -105,8 +105,8 @@ public class TransportService
    * Führt das Login für das Konto durch.
    * @param konto das Konto.
    * @return das Ergebnis der Authentifizierung.
-   * @throws ApplicationException
-   * @throws ApiException
+   * @throws ApplicationException wenn die Ausführung fehlschlug.
+   * @throws ApiException wenn die Ausführung fehlschlug.
    */
   public ApiAuth login(Konto konto) throws ApplicationException, ApiException
   {
@@ -157,8 +157,8 @@ public class TransportService
    * @param auth der Zugang.
    * @param start Start-Datum für die Abfrage.
    * @return die Liste der Transaktionen.
-   * @throws ApplicationException
-   * @throws ApiException
+   * @throws ApplicationException wenn die Ausführung fehlschlug.
+   * @throws ApiException wenn die Ausführung fehlschlug.
    */
   public TransactionResult getTransactions(ApiAuth auth, Date start) throws ApplicationException, ApiException
   {

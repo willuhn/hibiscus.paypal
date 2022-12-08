@@ -20,7 +20,7 @@ public interface PaypalSynchronizeJob extends SynchronizeJob
 {
   /**
    * Fuehrt den Auftrag aus.
-   * @throws ApplicationException
+   * @throws ApplicationException wenn die Ausführung fehlschlug.
    */
   void exeute() throws ApplicationException;
 
