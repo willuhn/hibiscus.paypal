@@ -5,7 +5,7 @@
         xsi:schemaLocation="http://www.willuhn.de/schema/jameica-plugin https://www.willuhn.de/schema/jameica-plugin-1.2.xsd"
         name="hibiscus.paypal" version="1.0-nightly" class="de.willuhn.jameica.hbci.paypal.Plugin" shared="true">
 
-  <description>Erweitert Hibiscus um Support für Paypal</description>
+  <description>Erweitert Hibiscus um Support für Paypal (unterstützt nur Business-Konten)</description>
   <url>https://www.willuhn.de/products/hibiscus/releases/nightly/hibiscus.paypal-1.0-nightly.zip</url>
   <homepage>http://www.willuhn.de/products/hibiscus</homepage>
   <license>GPL - http://www.gnu.org/copyleft/gpl.html</license>
