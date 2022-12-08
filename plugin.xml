@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<plugin xmlns="http://www.willuhn.de/schema/jameica-plugin"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.willuhn.de/schema/jameica-plugin https://www.willuhn.de/schema/jameica-plugin-1.2.xsd"
+        name="hibiscus.paypal" version="1.0-nightly" class="de.willuhn.jameica.hbci.paypal.Plugin" shared="true">
+
+  <description>Erweitert Hibiscus um Support für Paypal</description>
+  <url>https://www.willuhn.de/products/hibiscus/releases/nightly/hibiscus.paypal-1.0-nightly.zip</url>
+  <homepage>http://www.willuhn.de/products/hibiscus</homepage>
+  <license>GPL - http://www.gnu.org/copyleft/gpl.html</license>
+  <icon>paypal-large.png</icon>
+
+  <requires jameica="2.10.0+">
+    <import plugin="hibiscus" version="2.10.10+"/>
+  </requires>
+
+  <classfinder>
+    <include>hibiscus\.paypal\.jar</include>
+    <include>.*\.class</include>
+  </classfinder>
+  
+  <extensions>
+    <extension extends="de.willuhn.jameica.hbci.gui.menus.KontoList" class="de.willuhn.jameica.hbci.paypal.gui.ext.KontoMenuExtension"/>
+  </extensions>
+
+</plugin>
