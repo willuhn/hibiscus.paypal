@@ -46,8 +46,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import de.willuhn.annotation.Lifecycle;
 import de.willuhn.annotation.Lifecycle.Type;
 import de.willuhn.io.IOUtil;
+import de.willuhn.jameica.hbci.HBCIProperties;
 import de.willuhn.jameica.hbci.paypal.Plugin;
 import de.willuhn.jameica.hbci.paypal.domain.ApiAuth;
+import de.willuhn.jameica.hbci.paypal.domain.BalanceResult;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionResult;
 import de.willuhn.jameica.hbci.rmi.Konto;
 import de.willuhn.jameica.system.Application;
@@ -68,8 +70,7 @@ public class TransportService
   private final static I18N i18n = Application.getPluginLoader().getPlugin(Plugin.class).getResources().getI18N();
   
   public final static String DF_ISO8601 = "yyyy-MM-dd'T'HH:mm:ssZ";
-  
-  private final static String HEADER_AUTH = "Authorization";
+  public final static String DF_ISO8601_SALDO = "yyyy-MM-dd'T'HH:mm:ss";
   
   private CloseableHttpClient client = null;
   private final ObjectMapper mapper = new ObjectMapper();
@@ -179,6 +180,24 @@ public class TransportService
   }
   
   /**
+   * Liefert die aktuellen Salden.
+   * @param auth der Zugang.
+   * @return die Salden.
+   * @throws ApplicationException wenn die Ausführung fehlschlug.
+   * @throws ApiException wenn die Ausführung fehlschlug.
+   */
+  public BalanceResult getBalances(ApiAuth auth) throws ApplicationException, ApiException
+  {
+    final DateFormat df = new SimpleDateFormat(DF_ISO8601);
+    final Map<String,String> params = new HashMap<>();
+    params.put("as_of_time",df.format(new Date())); // Immer das aktuelle Datum
+    params.put("currency_code",HBCIProperties.CURRENCY_DEFAULT_DE); // Wir unterstützen ja eh nur EUR
+    
+    final HttpGet get = this.createGet(this.createUri("/v1/reporting/balances",params));
+    return this.request(get,auth,BalanceResult.class);
+  }
+  
+  /**
    * Erzeugt die Request-URI.
    * @param path der Pfad.
    * @param params optionale Request-Parameter.
@@ -259,11 +278,17 @@ public class TransportService
       Logger.info("executing request to: " + request.getUri());
       
       if (auth != null)
-        request.addHeader(HEADER_AUTH,"Bearer " + auth.access_token);
+        request.addHeader(HttpHeaders.AUTHORIZATION,"Bearer " + auth.access_token);
+      
+      request.setHeader(HttpHeaders.CONTENT_TYPE,"application/json");
+      request.setHeader(HttpHeaders.ACCEPT,"application/json");
+      request.setHeader(HttpHeaders.ACCEPT_LANGUAGE,"de_DE");
       
       final Object result = this.client.execute(request, response -> {
         final int status = response.getCode();
+
         final String json = this.read(response.getEntity().getContent());
+        
         if (status > 299)
         {
           String msg = status + ": " + response.getReasonPhrase();
@@ -321,6 +346,7 @@ public class TransportService
   {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     IOUtil.copy(is,bos);
+    
     final String s = bos.toString("UTF-8");
     Logger.debug("response: " + s);
     return s;

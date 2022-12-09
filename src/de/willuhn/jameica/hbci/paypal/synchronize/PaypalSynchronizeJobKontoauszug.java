@@ -26,8 +26,11 @@ import de.willuhn.datasource.rmi.DBIterator;
 import de.willuhn.jameica.hbci.HBCI;
 import de.willuhn.jameica.hbci.HBCIProperties;
 import de.willuhn.jameica.hbci.messaging.ImportMessage;
+import de.willuhn.jameica.hbci.messaging.SaldoMessage;
 import de.willuhn.jameica.hbci.paypal.Plugin;
 import de.willuhn.jameica.hbci.paypal.domain.ApiAuth;
+import de.willuhn.jameica.hbci.paypal.domain.BalanceDetail;
+import de.willuhn.jameica.hbci.paypal.domain.BalanceResult;
 import de.willuhn.jameica.hbci.paypal.domain.Money;
 import de.willuhn.jameica.hbci.paypal.domain.PayerInfo;
 import de.willuhn.jameica.hbci.paypal.domain.PayerName;
@@ -38,6 +41,7 @@ import de.willuhn.jameica.hbci.paypal.transport.ApiException;
 import de.willuhn.jameica.hbci.paypal.transport.TransportService;
 import de.willuhn.jameica.hbci.rmi.HibiscusAddress;
 import de.willuhn.jameica.hbci.rmi.Konto;
+import de.willuhn.jameica.hbci.rmi.Protokoll;
 import de.willuhn.jameica.hbci.rmi.Umsatz;
 import de.willuhn.jameica.hbci.server.VerwendungszweckUtil;
 import de.willuhn.jameica.hbci.synchronize.jobs.SynchronizeJobKontoauszug;
@@ -129,6 +133,9 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
           }
         }
         
+        // Jetzt noch den Saldo abrufen
+        this.applySaldo(k,this.transportService.getBalances(auth));
+        k.addToProtokoll(i18n.tr("Umsätze abgerufen"),Protokoll.TYP_SUCCESS);
         Logger.info("done. new entries: " + created + ", skipped entries (already in database): " + skipped);
       }
       else
@@ -156,6 +163,61 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       Logger.error("error",e);
       throw new ApplicationException(i18n.tr("Fehler beim Abrufen der Kontoauszüge"),e);
     }
+  }
+  
+  /**
+   * Übernimmt den Saldo.
+   * @param k das Konto.
+   * @param br der Saldo.
+   * @throws ApplicationException wenn das Übernehmen fehlschlägt.
+   * @throws RemoteException wenn das Übernehmen fehlschlägt.
+   */
+  private void applySaldo(Konto k, BalanceResult br) throws ApplicationException, RemoteException
+  {
+    if (br == null || br.balances == null || br.balances.isEmpty())
+    {
+      Logger.warn("no balances received");
+      return;
+    }
+
+    BalanceDetail b = null;
+    for (BalanceDetail d:br.balances)
+    {
+      if (Objects.equals(HBCIProperties.CURRENCY_DEFAULT_DE,d.currency))
+      {
+        b = d;
+        break;
+      }
+      Logger.info("ignoring balance - wrong currency " + d.currency);
+    }
+    
+    if (b == null)
+    {
+      Logger.warn("no balance found for " + HBCIProperties.CURRENCY_DEFAULT_DE);
+      return;
+    }
+
+    boolean set = false;
+    
+    if (b.total_balance != null)
+    {
+      k.setSaldo(b.total_balance.doubleValue());
+      set = true;
+    }
+    if (b.available_balance != null)
+    {
+      k.setSaldoAvailable(b.available_balance.doubleValue());
+      set = true;
+    }
+    
+    if (!set)
+    {
+      Logger.warn("no balance received found for " + HBCIProperties.CURRENCY_DEFAULT_DE);
+      return;
+    }
+    
+    k.store();
+    Application.getMessagingFactory().sendMessage(new SaldoMessage(k));
   }
   
   /**
