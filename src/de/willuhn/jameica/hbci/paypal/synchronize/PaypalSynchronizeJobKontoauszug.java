@@ -25,6 +25,7 @@ import de.willuhn.datasource.GenericObject;
 import de.willuhn.datasource.rmi.DBIterator;
 import de.willuhn.jameica.hbci.HBCI;
 import de.willuhn.jameica.hbci.HBCIProperties;
+import de.willuhn.jameica.hbci.SynchronizeOptions;
 import de.willuhn.jameica.hbci.messaging.ImportMessage;
 import de.willuhn.jameica.hbci.messaging.SaldoMessage;
 import de.willuhn.jameica.hbci.paypal.Plugin;
@@ -73,74 +74,93 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     try
     {
       final Konto k = (Konto) this.getContext(CTX_ENTITY);
+      Boolean forceSaldo   = (Boolean) this.getContext(CTX_FORCE_SALDO);
+      Boolean forceUmsatz  = (Boolean) this.getContext(CTX_FORCE_UMSATZ);
+      
+      SynchronizeOptions o = new SynchronizeOptions(k);
+      boolean syncSaldo  = (o.getSyncSaldo() || (forceSaldo != null && forceSaldo.booleanValue()));
+      boolean syncUmsatz = (o.getSyncKontoauszuege() || (forceUmsatz != null && forceUmsatz.booleanValue()));
+      
+      if (!syncSaldo && !syncUmsatz)
+      {
+        Logger.info("no synchronize options activated");
+        return;
+      }
+
       final Date startDate = this.getStartDate(k);
       
       final ApiAuth auth = this.transportService.login(k);
-      final TransactionResult result = this.transportService.getTransactions(auth,startDate);
-      
-      if (result != null)
-      {
-        int created = 0;
-        int skipped = 0;
-        
-        if (result.transaction_details != null && !result.transaction_details.isEmpty())
-        {
-          final Date mergeWindow = this.getMergeWindow(startDate,result);
-          final DBIterator existing = k.getUmsaetze(mergeWindow,null);
-          
-          Logger.info("applying entries");
-          
-          for (TransactionDetails t:result.transaction_details)
-          {
-            final Umsatz umsatz = convert(t);
-            if (umsatz == null)
-              continue;
-            
-            umsatz.setKonto(k);
 
-            boolean found = false;
+      if (syncUmsatz)
+      {
+        final TransactionResult result = this.transportService.getTransactions(auth,startDate);
+        if (result != null)
+        {
+          int created = 0;
+          int skipped = 0;
+          
+          if (result.transaction_details != null && !result.transaction_details.isEmpty())
+          {
+            final Date mergeWindow = this.getMergeWindow(startDate,result);
+            final DBIterator existing = k.getUmsaetze(mergeWindow,null);
             
-            /////////////////////////////////////////
-            // Checken, ob wir den Umsatz schon haben
-            existing.begin();
-            for (int i = 0; i<existing.size(); i++)
+            Logger.info("applying entries");
+            
+            for (TransactionDetails t:result.transaction_details)
             {
-              GenericObject dbObject = existing.next();
-              found = dbObject.equals(umsatz);
-              if (found)
-              {
-                skipped++; // Haben wir schon
-                break;
-              }
-            }
+              final Umsatz umsatz = convert(t);
+              if (umsatz == null)
+                continue;
+              
+              umsatz.setKonto(k);
+
+              boolean found = false;
+              
               /////////////////////////////////////////
-            
-            // Umsatz neu anlegen
-            if (!found)
-            {
-              try
+              // Checken, ob wir den Umsatz schon haben
+              existing.begin();
+              for (int i = 0; i<existing.size(); i++)
               {
-                umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
-                Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
-                created++;
+                GenericObject dbObject = existing.next();
+                found = dbObject.equals(umsatz);
+                if (found)
+                {
+                  skipped++; // Haben wir schon
+                  break;
+                }
               }
-              catch (Exception e2)
+                /////////////////////////////////////////
+              
+              // Umsatz neu anlegen
+              if (!found)
               {
-                Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr("Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),StatusBarMessage.TYPE_ERROR));
-                Logger.error("error while adding umsatz, skipping this one",e2);
+                try
+                {
+                  umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
+                  Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
+                  created++;
+                }
+                catch (Exception e2)
+                {
+                  Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr("Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),StatusBarMessage.TYPE_ERROR));
+                  Logger.error("error while adding umsatz, skipping this one",e2);
+                }
               }
             }
           }
+          Logger.info("done. new entries: " + created + ", skipped entries (already in database): " + skipped);
+          k.addToProtokoll(i18n.tr("Umsätze abgerufen"),Protokoll.TYP_SUCCESS);
         }
-        
+        else
+        {
+          Logger.info("got no new entries");
+        }
+      }
+      
+      if (syncSaldo)
+      {
         // Jetzt noch den Saldo abrufen
         this.applySaldo(k,this.transportService.getBalances(auth));
-        k.addToProtokoll(i18n.tr("Umsätze abgerufen"),Protokoll.TYP_SUCCESS);
-        Logger.info("done. new entries: " + created + ", skipped entries (already in database): " + skipped);
-      }
-      else
-      {
-        Logger.info("got no new entries");
       }
     }
     catch (ApiException ae)
@@ -217,6 +237,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     }
     
     k.store();
+    k.addToProtokoll(i18n.tr("Saldo abgerufen"),Protokoll.TYP_SUCCESS);
     Application.getMessagingFactory().sendMessage(new SaldoMessage(k));
   }
   
