@@ -292,7 +292,8 @@ public class TransportService
         if (status > 299)
         {
           String msg = status + ": " + response.getReasonPhrase();
-          Logger.error("got http status " + msg);
+          Logger.error("got http status: " + msg);
+          Logger.error("json response: " + json);
           
           // Checken, ob wir den Fehler lesen koennen
           try
