@@ -324,7 +324,6 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     if (pi != null)
     {
       HibiscusAddress e = (HibiscusAddress) de.willuhn.jameica.hbci.Settings.getDBService().createObject(HibiscusAddress.class,null);
-      e.setIban(pi.account_id);
 
       final PayerName pn = pi.payer_name;
       if (pn != null)
