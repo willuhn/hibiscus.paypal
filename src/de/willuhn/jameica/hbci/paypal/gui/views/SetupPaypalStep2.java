@@ -107,7 +107,7 @@ public class SetupPaypalStep2 extends AbstractSetupPaypal
           }
           catch (RemoteException re)
           {
-            Logger.error("unable to show input for api client id",re);
+            Logger.error("unable to show input for api client-id",re);
           }
           return newComp;
         }
@@ -115,7 +115,7 @@ public class SetupPaypalStep2 extends AbstractSetupPaypal
         
       }
     };
-    info.setTitle(i18n.tr("Schritt 2 von 3: API Client ID"));
+    info.setTitle(i18n.tr("Schritt 2 von 3: API Client-ID"));
     info.setIcon("paypal-large.png");
     
     final Button b = this.getNext();
@@ -216,7 +216,7 @@ public class SetupPaypalStep2 extends AbstractSetupPaypal
         }
         catch (RemoteException re)
         {
-          Logger.error("unable to apply api client id",re);
+          Logger.error("unable to apply api client-id",re);
         }
       }
     };
