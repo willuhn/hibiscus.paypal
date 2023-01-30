@@ -32,6 +32,7 @@ import de.willuhn.jameica.hbci.paypal.Plugin;
 import de.willuhn.jameica.hbci.paypal.domain.ApiAuth;
 import de.willuhn.jameica.hbci.paypal.domain.BalanceDetail;
 import de.willuhn.jameica.hbci.paypal.domain.BalanceResult;
+import de.willuhn.jameica.hbci.paypal.domain.CartItemDetail;
 import de.willuhn.jameica.hbci.paypal.domain.Money;
 import de.willuhn.jameica.hbci.paypal.domain.PayerInfo;
 import de.willuhn.jameica.hbci.paypal.domain.PayerName;
@@ -108,42 +109,45 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
             
             for (TransactionDetails t:result.transaction_details)
             {
-              final Umsatz umsatz = convert(t);
-              if (umsatz == null)
+              final List<Umsatz> umsaetze = convert(t);
+              if (umsaetze == null || umsaetze.isEmpty())
                 continue;
-              
-              umsatz.setKonto(k);
 
-              boolean found = false;
-              
-              /////////////////////////////////////////
-              // Checken, ob wir den Umsatz schon haben
-              existing.begin();
-              for (int i = 0; i<existing.size(); i++)
+              for (Umsatz umsatz:umsaetze)
               {
-                GenericObject dbObject = existing.next();
-                found = dbObject.equals(umsatz);
-                if (found)
-                {
-                  skipped++; // Haben wir schon
-                  break;
-                }
-              }
+                umsatz.setKonto(k);
+
+                boolean found = false;
+                
                 /////////////////////////////////////////
-              
-              // Umsatz neu anlegen
-              if (!found)
-              {
-                try
+                // Checken, ob wir den Umsatz schon haben
+                existing.begin();
+                for (int i = 0; i<existing.size(); i++)
                 {
-                  umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
-                  Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
-                  created++;
+                  GenericObject dbObject = existing.next();
+                  found = dbObject.equals(umsatz);
+                  if (found)
+                  {
+                    skipped++; // Haben wir schon
+                    break;
+                  }
                 }
-                catch (Exception e2)
+                  /////////////////////////////////////////
+                
+                // Umsatz neu anlegen
+                if (!found)
                 {
-                  Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr("Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),StatusBarMessage.TYPE_ERROR));
-                  Logger.error("error while adding umsatz, skipping this one",e2);
+                  try
+                  {
+                    umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
+                    Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
+                    created++;
+                  }
+                  catch (Exception e2)
+                  {
+                    Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr("Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),StatusBarMessage.TYPE_ERROR));
+                    Logger.error("error while adding umsatz, skipping this one",e2);
+                  }
                 }
               }
             }
@@ -294,7 +298,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
    * @return der Hibiscus-Datensatz.
    * @throws Exception
    */
-  private Umsatz convert(TransactionDetails t) throws Exception
+  private List<Umsatz> convert(TransactionDetails t) throws Exception
   {
     final TransactionInfo ti = t.transaction_info;
     if (ti == null)
@@ -302,6 +306,8 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       Logger.warn("received transaction-details w/o transaction-info - skipping");
       return null;
     }
+    
+    final List<Umsatz> result = new ArrayList<>();
 
     final String status = ti.transaction_status;
     
@@ -313,6 +319,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     }
     
     Umsatz umsatz = (Umsatz) de.willuhn.jameica.hbci.Settings.getDBService().createObject(Umsatz.class,null);
+    result.add(umsatz);
     umsatz.setTransactionId(ti.transaction_id);
     umsatz.setEndToEndId(ti.transaction_id);
     umsatz.setArt(clean(ti.transaction_event_code));
@@ -335,6 +342,14 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       usages.add(ti.transaction_subject);
     if (StringUtils.trimToNull(ti.transaction_note) != null)
       usages.add(ti.transaction_note);
+    if (t.cart_info != null && t.cart_info.item_details != null && !t.cart_info.item_details.isEmpty())
+    {
+      for (CartItemDetail cd:t.cart_info.item_details)
+      {
+        if (StringUtils.trimToNull(cd.item_name) != null)
+          usages.add(cd.item_name);
+      }
+    }
     
     if (!usages.isEmpty())
       VerwendungszweckUtil.applyCamt(umsatz,usages);
@@ -342,9 +357,10 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     ////////////////////////////////////////////////////////////////////////////
     // Gegenkonto
     final PayerInfo pi = t.payer_info;
+    HibiscusAddress e = null;
     if (pi != null)
     {
-      HibiscusAddress e = (HibiscusAddress) de.willuhn.jameica.hbci.Settings.getDBService().createObject(HibiscusAddress.class,null);
+      e = (HibiscusAddress) de.willuhn.jameica.hbci.Settings.getDBService().createObject(HibiscusAddress.class,null);
 
       final PayerName pn = pi.payer_name;
       if (pn != null)
@@ -375,8 +391,31 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     }
     //
     ////////////////////////////////////////////////////////////////////////////
+    
+    
+    
+    // Die Gebühren, falls vorhanden
+    if (ti.fee_amount != null)
+    {
+      Umsatz umsatz2 = (Umsatz) de.willuhn.jameica.hbci.Settings.getDBService().createObject(Umsatz.class,null);
+      result.add(umsatz2);
+      umsatz2.setTransactionId(ti.transaction_id + "-fee");
+      umsatz2.setCustomerRef(t.payer_info != null ? t.payer_info.account_id : null);
+      umsatz2.setBetrag(ti.fee_amount.doubleValue());
+      umsatz2.setZweck(i18n.tr("Paypal-Gebühren für Transaktion {0}",ti.transaction_id));
+      
+      if (e != null)
+        umsatz2.setGegenkonto(e);
+      
+      Money saldo2 = ti.ending_balance;
+      if (saldo2 != null)
+        umsatz2.setSaldo(saldo2.doubleValue() + ti.fee_amount.doubleValue()); // Fee ist schon eine negative Zahl, daher sinkt der Saldo
 
-    return umsatz;
+      umsatz2.setDatum(ti.transaction_updated_date);
+      umsatz2.setValuta(ti.transaction_updated_date);
+    }
+
+    return result;
   }
   
   /**
