@@ -310,6 +310,8 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     final List<Umsatz> result = new ArrayList<>();
 
     final String status = ti.transaction_status;
+    final String ec = ti.transaction_event_code;
+    String feeZweck = i18n.tr("Gebühren für Transaktion {0}",ti.transaction_id);
     
     // Wir übernehmen Transaktionen nur, wenn sie den Status "S" haben oder gar keinen
     if (status != null && !Objects.equals("S",status))
@@ -322,7 +324,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     result.add(umsatz);
     umsatz.setTransactionId(ti.transaction_id);
     umsatz.setEndToEndId(ti.transaction_id);
-    umsatz.setArt(clean(ti.transaction_event_code));
+    umsatz.setArt(clean(ec));
     umsatz.setCustomerRef(t.payer_info != null ? t.payer_info.account_id : null);
     umsatz.setGvCode(status);
     
@@ -340,7 +342,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     final List<String> usages = new ArrayList<>();
     if (StringUtils.trimToNull(ti.transaction_subject) != null)
       usages.add(ti.transaction_subject);
-    if (StringUtils.trimToNull(ti.transaction_note) != null)
+    if (StringUtils.trimToNull(ti.transaction_note) != null && (StringUtils.trimToNull(ti.transaction_subject) == null || !ti.transaction_note.equals(ti.transaction_subject)))
       usages.add(ti.transaction_note);
     if (t.cart_info != null && t.cart_info.item_details != null && !t.cart_info.item_details.isEmpty())
     {
@@ -351,9 +353,6 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       }
     }
     
-    if (!usages.isEmpty())
-      VerwendungszweckUtil.applyCamt(umsatz,usages);
-
     ////////////////////////////////////////////////////////////////////////////
     // Gegenkonto
     final PayerInfo pi = t.payer_info;
@@ -387,8 +386,51 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
           name = StringUtils.trimToEmpty(name.substring(0,HBCIProperties.HBCI_TRANSFER_NAME_MAXLENGTH));
         e.setName(name);
       }
+      
+      if (ec != null)
+      {
+        if (ec.startsWith("T04"))
+        {
+          e.setName(i18n.tr("Bankkonto"));
+          
+          if (ec.equals("T0400"))
+          {
+            usages.clear();
+            usages.add(i18n.tr("Abbuchung auf Bankkonto"));
+          }
+          else if (ec.equals("T0401"))
+          {
+            usages.clear();
+            usages.add(i18n.tr("Automatische Abbuchung auf Bankkonto"));
+          }
+        }
+        else if (ec.startsWith("T11"))
+        {
+          if (ec.equals("T1107"))
+          {
+            if (StringUtils.trimToNull(ti.transaction_subject) != null)
+              umsatz.setKommentar(usages.remove(0));
+            
+            if (!usages.isEmpty())
+              usages.add(0, i18n.tr("Rückzahlung ") + usages.remove(0));
+            else 
+              usages.add(0, i18n.tr("Rückzahlung "));
+            
+            feeZweck = i18n.tr("Widerrufene ") + feeZweck;
+          }
+        }
+      }
+            
+      if (!usages.isEmpty())
+        VerwendungszweckUtil.applyCamt(umsatz,usages);
+      
+      final String email = pi.email_address;
+      if (email != null)
+        e.setIban(email);
+      
       umsatz.setGegenkonto(e);
     }
+      
     //
     ////////////////////////////////////////////////////////////////////////////
     
@@ -397,15 +439,16 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     // Die Gebühren, falls vorhanden
     if (ti.fee_amount != null)
     {
+      e = (HibiscusAddress) de.willuhn.jameica.hbci.Settings.getDBService().createObject(HibiscusAddress.class,null);
+      e.setName("Paypal");
+      
       Umsatz umsatz2 = (Umsatz) de.willuhn.jameica.hbci.Settings.getDBService().createObject(Umsatz.class,null);
       result.add(umsatz2);
       umsatz2.setTransactionId(ti.transaction_id + "-fee");
       umsatz2.setCustomerRef(t.payer_info != null ? t.payer_info.account_id : null);
       umsatz2.setBetrag(ti.fee_amount.doubleValue());
-      umsatz2.setZweck(i18n.tr("Paypal-Gebühren für Transaktion {0}",ti.transaction_id));
-      
-      if (e != null)
-        umsatz2.setGegenkonto(e);
+      umsatz2.setZweck(feeZweck);
+      umsatz2.setGegenkonto(e);
       
       Money saldo2 = ti.ending_balance;
       if (saldo2 != null)
