@@ -313,10 +313,10 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     final String ec = ti.transaction_event_code;
     String feeZweck = i18n.tr("Gebühren für Transaktion {0}",ti.transaction_id);
     
-    // Wir übernehmen Transaktionen nur, wenn sie den Status "S" haben oder gar keinen
-    if (status != null && !Objects.equals("S",status))
+    // Wir übernehmen Transaktionen nur, wenn sie den Status "S" oder "P" haben oder gar keinen
+    if (status != null && !Objects.equals("S",status) && !Objects.equals("P",status))
     {
-      Logger.info("skipping pending/denied/reversed transaction id " + ti.transaction_id + " (status: " + status + ")");
+      Logger.info("skipping denied/reversed transaction id " + ti.transaction_id + " (status: " + status + ")");
       return null;
     }
     
