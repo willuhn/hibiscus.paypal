@@ -38,7 +38,6 @@ import de.willuhn.jameica.hbci.paypal.domain.PayerInfo;
 import de.willuhn.jameica.hbci.paypal.domain.PayerName;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionDetails;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionInfo;
-import de.willuhn.jameica.hbci.paypal.domain.TransactionResult;
 import de.willuhn.jameica.hbci.paypal.transport.ApiException;
 import de.willuhn.jameica.hbci.paypal.transport.TransportService;
 import de.willuhn.jameica.hbci.rmi.HibiscusAddress;
@@ -94,71 +93,66 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
 
       if (syncUmsatz)
       {
-        final TransactionResult result = this.transportService.getTransactions(auth,startDate);
-        if (result != null)
-        {
-          int created = 0;
-          int skipped = 0;
-          
-          if (result.transaction_details != null && !result.transaction_details.isEmpty())
-          {
-            final Date mergeWindow = this.getMergeWindow(startDate,result);
-            final DBIterator existing = k.getUmsaetze(mergeWindow,null);
-            
-            Logger.info("applying entries");
-            
-            for (TransactionDetails t:result.transaction_details)
-            {
-              final List<Umsatz> umsaetze = convert(t);
-              if (umsaetze == null || umsaetze.isEmpty())
-                continue;
+        final List<TransactionDetails> result = this.transportService.getTransactions(auth,startDate);
 
-              for (Umsatz umsatz:umsaetze)
-              {
-                umsatz.setKonto(k);
+	int created = 0;
+	int skipped = 0;
 
-                boolean found = false;
-                
-                /////////////////////////////////////////
-                // Checken, ob wir den Umsatz schon haben
-                existing.begin();
-                for (int i = 0; i<existing.size(); i++)
-                {
-                  GenericObject dbObject = existing.next();
-                  found = dbObject.equals(umsatz);
-                  if (found)
-                  {
-                    skipped++; // Haben wir schon
-                    break;
-                  }
-                }
-                  /////////////////////////////////////////
-                
-                // Umsatz neu anlegen
-                if (!found)
-                {
-                  try
-                  {
-                    umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
-                    Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
-                    created++;
-                  }
-                  catch (Exception e2)
-                  {
-                    Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr("Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),StatusBarMessage.TYPE_ERROR));
-                    Logger.error("error while adding umsatz, skipping this one",e2);
-                  }
-                }
-              }
-            }
-          }
-          Logger.info("done. new entries: " + created + ", skipped entries (already in database): " + skipped);
-          k.addToProtokoll(i18n.tr("Umsätze abgerufen"),Protokoll.TYP_SUCCESS);
-        }
-        else
-        {
-          Logger.info("got no new entries");
-        }
+	if (!result.isEmpty())
+	{
+	  final Date mergeWindow = this.getMergeWindow(startDate, result);
+	  final DBIterator existing = k.getUmsaetze(mergeWindow, null);
+
+	  Logger.info("applying entries");
+
+	  for (TransactionDetails t : result)
+	  {
+	    final List<Umsatz> umsaetze = convert(t);
+	    if (umsaetze == null || umsaetze.isEmpty())
+	      continue;
+
+	    for (Umsatz umsatz : umsaetze)
+	    {
+	      umsatz.setKonto(k);
+
+	      boolean found = false;
+
+	      /////////////////////////////////////////
+	      // Checken, ob wir den Umsatz schon haben
+	      existing.begin();
+	      for (int i = 0; i < existing.size(); i++)
+	      {
+		GenericObject dbObject = existing.next();
+		found = dbObject.equals(umsatz);
+		if (found)
+		{
+		  skipped++; // Haben wir schon
+		  break;
+		}
+	      }
+	      /////////////////////////////////////////
+
+	      // Umsatz neu anlegen
+	      if (!found)
+	      {
+		try
+		{
+		  umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
+		  Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
+		  created++;
+		} catch (Exception e2)
+		{
+		  Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr(
+		      "Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),
+		      StatusBarMessage.TYPE_ERROR));
+		  Logger.error("error while adding umsatz, skipping this one", e2);
+		}
+	      }
+	    }
+	  }
+	}
+	Logger.info("done. new entries: " + created + ", skipped entries (already in database): " + skipped);
+	k.addToProtokoll(i18n.tr("Umsätze abgerufen"), Protokoll.TYP_SUCCESS);
       }
       
       if (syncSaldo)
@@ -251,15 +245,15 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
    * @param tr die Umsatzbuchungen.
    * @return das Startdatum. Kann NULL sein.
    */
-  private Date getMergeWindow(final Date startDate, final TransactionResult tr)
+  private Date getMergeWindow(final Date startDate, final List<TransactionDetails> tr)
   {
     // Das Datum der ältesten empfangenen Transaktion
     Date d = null;
     String basedOn = null;
 
-    if (tr.transaction_details != null && !tr.transaction_details.isEmpty())
+    if (tr != null && !tr.isEmpty())
     {
-      for (TransactionDetails td:tr.transaction_details)
+      for (TransactionDetails td:tr)
       {
         final TransactionInfo ti = td.transaction_info;
         if (ti == null || ti.transaction_updated_date == null)
@@ -488,24 +482,13 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
         Logger.warn("future start date " + start + " given. this is not allowed");
         start = null;
       }
-      else
-      {
-        // Mehr als 30 Tage rueckwirkend erlaubt Paypal nicht
-        final Date limit = new Date(System.currentTimeMillis() - (30 * 24 * 60 * 60 * 1000L));
-        if (start.before(limit))
-        {
-          Logger.warn("start date too old - maximum 30 days are allowed");
-          start = null;
-        }
-      }
-      
     }
     
     if (start == null)
     {
-      // Wir nehmen die letzten 30 Tage
+      // Wir nehmen die letzten 360 Tage
       Calendar cal = Calendar.getInstance();
-      cal.add(Calendar.DATE,-30);
+      cal.add(Calendar.DATE,-360);
       start = cal.getTime();
     }
     
