@@ -18,6 +18,9 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -50,12 +53,12 @@ import de.willuhn.jameica.hbci.HBCIProperties;
 import de.willuhn.jameica.hbci.paypal.Plugin;
 import de.willuhn.jameica.hbci.paypal.domain.ApiAuth;
 import de.willuhn.jameica.hbci.paypal.domain.BalanceResult;
+import de.willuhn.jameica.hbci.paypal.domain.TransactionDetails;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionResult;
 import de.willuhn.jameica.hbci.rmi.Konto;
 import de.willuhn.jameica.system.Application;
 import de.willuhn.jameica.system.OperationCanceledException;
 import de.willuhn.jameica.system.Settings;
-import de.willuhn.jameica.util.DateUtil;
 import de.willuhn.logging.Logger;
 import de.willuhn.util.ApplicationException;
 import de.willuhn.util.I18N;
@@ -155,28 +158,43 @@ public class TransportService
   
   /**
    * Liefert die Transaktionen für den Zugang.
-   * @param auth der Zugang.
+   * 
+   * @param auth  der Zugang.
    * @param start Start-Datum für die Abfrage.
    * @return die Liste der Transaktionen.
    * @throws ApplicationException wenn die Ausführung fehlschlug.
-   * @throws ApiException wenn die Ausführung fehlschlug.
+   * @throws ApiException         wenn die Ausführung fehlschlug.
    */
-  public TransactionResult getTransactions(ApiAuth auth, Date start) throws ApplicationException, ApiException
+  public List<TransactionDetails> getTransactions(ApiAuth auth, Date start) throws ApplicationException, ApiException
   {
     if (start == null)
       throw new ApplicationException("Kein Startdatum angegeben");
-    final DateFormat df = new SimpleDateFormat(DF_ISO8601);
-    final Map<String,String> params = new HashMap<>();
-    params.put("end_date",df.format(DateUtil.endOfDay(new Date()))); // End-Datum ist Pflicht
-    params.put("balance_affecting_records_only","Y");
-    params.put("fields","all");
-    params.put("page","1");
-    params.put("page_size","500");
-    if (start != null)
-      params.put("start_date",df.format(start));
-    
-    final HttpGet get = this.createGet(this.createUri("/v1/reporting/transactions",params));
-    return this.request(get,auth,TransactionResult.class);
+    List<TransactionDetails> result = new ArrayList<>();
+    ZonedDateTime startDate = start.toInstant().atZone(ZoneId.systemDefault());
+    do
+    {
+      final Map<String, String> params = new HashMap<>();
+      params.put("start_date", startDate.format(DateTimeFormatter.ofPattern(DF_ISO8601)));
+      if (startDate.plusDays(30).isAfter(ZonedDateTime.now()))
+      {
+	params.put("end_date", ZonedDateTime.now().format(DateTimeFormatter.ofPattern(DF_ISO8601)));
+      } else
+      {
+	params.put("end_date", startDate.plusDays(30).format(DateTimeFormatter.ofPattern(DF_ISO8601)));
+      }
+      params.put("balance_affecting_records_only", "Y");
+      params.put("fields", "all");
+      params.put("page", "1");
+      params.put("page_size", "500");
+      final HttpGet get = this.createGet(this.createUri("/v1/reporting/transactions", params));
+      TransactionResult transactionResult = request(get, auth, TransactionResult.class);
+      if (transactionResult != null && transactionResult.transaction_details != null)
+      {
+	result.addAll(transactionResult.transaction_details);
+      }
+      startDate = startDate.plusDays(30);
+    } while (startDate.isBefore(ZonedDateTime.now()));
+    return result;
   }
   
   /**
