@@ -95,64 +95,63 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       {
         final List<TransactionDetails> result = this.transportService.getTransactions(auth,startDate);
 
-	int created = 0;
-	int skipped = 0;
-
-	if (!result.isEmpty())
-	{
-	  final Date mergeWindow = this.getMergeWindow(startDate, result);
-	  final DBIterator existing = k.getUmsaetze(mergeWindow, null);
-
-	  Logger.info("applying entries");
-
-	  for (TransactionDetails t : result)
-	  {
-	    final List<Umsatz> umsaetze = convert(t);
-	    if (umsaetze == null || umsaetze.isEmpty())
-	      continue;
-
-	    for (Umsatz umsatz : umsaetze)
-	    {
-	      umsatz.setKonto(k);
-
-	      boolean found = false;
-
-	      /////////////////////////////////////////
-	      // Checken, ob wir den Umsatz schon haben
-	      existing.begin();
-	      for (int i = 0; i < existing.size(); i++)
-	      {
-		GenericObject dbObject = existing.next();
-		found = dbObject.equals(umsatz);
-		if (found)
-		{
-		  skipped++; // Haben wir schon
-		  break;
-		}
-	      }
-	      /////////////////////////////////////////
-
-	      // Umsatz neu anlegen
-	      if (!found)
-	      {
-		try
-		{
-		  umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
-		  Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
-		  created++;
-		} catch (Exception e2)
-		{
-		  Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr(
-		      "Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),
-		      StatusBarMessage.TYPE_ERROR));
-		  Logger.error("error while adding umsatz, skipping this one", e2);
-		}
-	      }
-	    }
-	  }
-	}
-	Logger.info("done. new entries: " + created + ", skipped entries (already in database): " + skipped);
-	k.addToProtokoll(i18n.tr("Umsätze abgerufen"), Protokoll.TYP_SUCCESS);
+      	int created = 0;
+      	int skipped = 0;
+      
+      	if (!result.isEmpty())
+      	{
+      	  final Date mergeWindow = this.getMergeWindow(startDate, result);
+      	  final DBIterator existing = k.getUmsaetze(mergeWindow, null);
+      
+      	  Logger.info("applying entries");
+      
+      	  for (TransactionDetails t : result)
+      	  {
+      	    final List<Umsatz> umsaetze = convert(t);
+      	    if (umsaetze == null || umsaetze.isEmpty())
+      	      continue;
+      
+      	    for (Umsatz umsatz : umsaetze)
+      	    {
+      	      umsatz.setKonto(k);
+      
+      	      boolean found = false;
+      
+      	      /////////////////////////////////////////
+      	      // Checken, ob wir den Umsatz schon haben
+      	      existing.begin();
+      	      for (int i = 0; i < existing.size(); i++)
+      	      {
+            		GenericObject dbObject = existing.next();
+            		found = dbObject.equals(umsatz);
+            		if (found)
+            		{
+            		  skipped++; // Haben wir schon
+            		  break;
+            		}
+      	      }
+      	      /////////////////////////////////////////
+      
+      	      // Umsatz neu anlegen
+      	      if (!found)
+      	      {
+            		try
+            		{
+            		  umsatz.store(); // den Umsatz haben wir noch nicht, speichern!
+            		  Application.getMessagingFactory().sendMessage(new ImportMessage(umsatz));
+            		  created++;
+            		}
+            		catch (Exception e2)
+            		{
+            		  Application.getMessagingFactory().sendMessage(new StatusBarMessage(i18n.tr("Nicht alle empfangenen Umsätze konnten gespeichert werden. Bitte prüfen Sie das System-Protokoll"),StatusBarMessage.TYPE_ERROR));
+            		  Logger.error("error while adding umsatz, skipping this one", e2);
+            		}
+	            }
+	          }
+	        }
+        }
+	      Logger.info("done. new entries: " + created + ", skipped entries (already in database): " + skipped);
+	      k.addToProtokoll(i18n.tr("Umsätze abgerufen"), Protokoll.TYP_SUCCESS);
       }
       
       if (syncSaldo)
