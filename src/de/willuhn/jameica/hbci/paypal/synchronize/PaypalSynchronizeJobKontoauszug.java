@@ -490,6 +490,11 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       cal.add(Calendar.DATE,-360);
       start = cal.getTime();
     }
+    else
+    {
+      // Umsaetze vom Vortrag erneut abrufen
+      start = new Date(start.getTime() - 24 * 60 * 60 * 1000L);
+    }
     
     start = DateUtil.startOfDay(start);
     Logger.info("startdate: " + HBCI.LONGDATEFORMAT.format(start));
