@@ -349,84 +349,87 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     ////////////////////////////////////////////////////////////////////////////
     // Gegenkonto
     final PayerInfo pi = t.payer_info;
-    HibiscusAddress e = null;
-    if (pi != null)
+    HibiscusAddress e = (HibiscusAddress) de.willuhn.jameica.hbci.Settings.getDBService().createObject(HibiscusAddress.class,null);
+    
+    final String email = pi != null ? pi.email_address : null;
+    if (email != null)
+      e.setIban(email);
+    
+    final PayerName pn = pi != null ? pi.payer_name : null;
+    if (pn != null)
     {
-      e = (HibiscusAddress) de.willuhn.jameica.hbci.Settings.getDBService().createObject(HibiscusAddress.class,null);
-
-      final PayerName pn = pi.payer_name;
-      if (pn != null)
+      String name = StringUtils.trimToNull(pn.alternate_full_name);
+      
+      if (name == null)
       {
-        String name = StringUtils.trimToNull(pn.alternate_full_name);
+        StringBuilder sb = new StringBuilder();
+        if (pn.given_name != null)
+          sb.append(pn.given_name);
         
-        if (name == null)
+        if (pn.surname != null)
         {
-          StringBuilder sb = new StringBuilder();
-          if (pn.given_name != null)
-            sb.append(pn.given_name);
-          
-          if (pn.surname != null)
-          {
-            if (sb.length() > 0)
-              sb.append(" ");
-            sb.append(pn.surname);
-          }
-          
-          name = sb.toString();
+          if (sb.length() > 0)
+            sb.append(" ");
+          sb.append(pn.surname);
         }
         
-        if (name != null && name.length() > HBCIProperties.HBCI_TRANSFER_NAME_MAXLENGTH)
-          name = StringUtils.trimToEmpty(name.substring(0,HBCIProperties.HBCI_TRANSFER_NAME_MAXLENGTH));
-        e.setName(name);
+        name = sb.toString();
       }
       
-      if (ec != null)
-      {
-        if (ec.startsWith("T04"))
-        {
-          e.setName(i18n.tr("Bankkonto"));
-          
-          if (ec.equals("T0400"))
-          {
-            usages.clear();
-            usages.add(i18n.tr("Abbuchung auf Bankkonto"));
-          }
-          else if (ec.equals("T0401"))
-          {
-            usages.clear();
-            usages.add(i18n.tr("Automatische Abbuchung auf Bankkonto"));
-          }
-        }
-        else if (ec.startsWith("T11"))
-        {
-          if (ec.equals("T1107"))
-          {
-            if (StringUtils.trimToNull(ti.transaction_subject) != null)
-              umsatz.setKommentar(usages.remove(0));
-            
-            if (!usages.isEmpty())
-              usages.add(0, i18n.tr("Rückzahlung ") + usages.remove(0));
-            else 
-              usages.add(0, i18n.tr("Rückzahlung "));
-            
-            feeZweck = i18n.tr("Widerrufene ") + feeZweck;
-          }
-        }
-      }
-            
-      if (!usages.isEmpty())
-        VerwendungszweckUtil.applyCamt(umsatz,usages);
-      
-      final String email = pi.email_address;
-      if (email != null)
-        e.setIban(email);
-      
-      umsatz.setGegenkonto(e);
+      if (name != null && name.length() > HBCIProperties.HBCI_TRANSFER_NAME_MAXLENGTH)
+        name = StringUtils.trimToEmpty(name.substring(0,HBCIProperties.HBCI_TRANSFER_NAME_MAXLENGTH));
+      e.setName(name);
     }
-      
+    
+    if (ec != null)
+    {
+      if (ec.startsWith("T04"))
+      {
+        e.setName(i18n.tr("Bankkonto"));
+        
+        if (ec.equals("T0400"))
+        {
+          usages.clear();
+          usages.add(i18n.tr("Abbuchung auf Bankkonto"));
+        }
+        else if (ec.equals("T0401"))
+        {
+          usages.clear();
+          usages.add(i18n.tr("Automatische Abbuchung auf Bankkonto"));
+        }
+      }
+      else if (ec.startsWith("T03"))
+      {
+        e.setName(i18n.tr("Bankkonto"));
+        
+        if (ec.equals("T0300"))
+        {
+          usages.clear();
+          usages.add(i18n.tr("Einzahlung vom Bankkonto"));
+        }
+      }
+      else if (ec.startsWith("T11"))
+      {
+        if (ec.equals("T1107"))
+        {
+          if (StringUtils.trimToNull(ti.transaction_subject) != null)
+            umsatz.setKommentar(usages.remove(0));
+          
+          if (!usages.isEmpty())
+            usages.add(0, i18n.tr("Rückzahlung ") + usages.remove(0));
+          else 
+            usages.add(0, i18n.tr("Rückzahlung "));
+          
+          feeZweck = i18n.tr("Widerrufene ") + feeZweck;
+        }
+      }
+    }
+    umsatz.setGegenkonto(e);
     //
     ////////////////////////////////////////////////////////////////////////////
     
+    if (!usages.isEmpty())
+      VerwendungszweckUtil.applyCamt(umsatz,usages);
     
     
     // Die Gebühren, falls vorhanden
