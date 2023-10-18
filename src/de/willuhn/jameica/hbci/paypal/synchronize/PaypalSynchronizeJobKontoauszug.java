@@ -353,7 +353,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     
     final String email = pi != null ? pi.email_address : null;
     if (email != null)
-      e.setIban(email);
+      e.setIban(email.substring(0, Math.min(40, email.length())));
     
     final PayerName pn = pi != null ? pi.payer_name : null;
     if (pn != null)
@@ -424,6 +424,8 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
         }
       }
     }
+    
+    
     umsatz.setGegenkonto(e);
     //
     ////////////////////////////////////////////////////////////////////////////
