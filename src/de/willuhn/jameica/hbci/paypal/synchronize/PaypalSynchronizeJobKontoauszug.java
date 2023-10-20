@@ -335,7 +335,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     final List<String> usages = new ArrayList<>();
     if (StringUtils.trimToNull(ti.transaction_subject) != null)
       usages.add(ti.transaction_subject);
-    if (StringUtils.trimToNull(ti.transaction_note) != null && (StringUtils.trimToNull(ti.transaction_subject) == null || !ti.transaction_note.equals(ti.transaction_subject)))
+    if (StringUtils.trimToNull(ti.transaction_note) != null && (StringUtils.trimToNull(ti.transaction_subject) == null || !ti.transaction_note.trim().equals(ti.transaction_subject.trim())))
       usages.add(ti.transaction_note);
     if (t.cart_info != null && t.cart_info.item_details != null && !t.cart_info.item_details.isEmpty())
     {
