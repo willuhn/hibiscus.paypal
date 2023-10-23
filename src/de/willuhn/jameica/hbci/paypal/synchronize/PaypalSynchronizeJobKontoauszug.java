@@ -342,7 +342,15 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       for (CartItemDetail cd:t.cart_info.item_details)
       {
         if (StringUtils.trimToNull(cd.item_name) != null)
-          usages.add(cd.item_name);
+        {
+          if (!usages.isEmpty())
+          {
+            if (!usages.contains(cd.item_name))
+              usages.add(", " + cd.item_name);
+          }
+          else
+            usages.add(cd.item_name);
+        }
       }
     }
     
@@ -505,5 +513,5 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     Logger.info("startdate: " + HBCI.LONGDATEFORMAT.format(start));
     return start;
   }
-  
+
 }
