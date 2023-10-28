@@ -1,6 +1,7 @@
 /**********************************************************************
  *
  * Copyright (c) 2022 Olaf Willuhn
+ * Copyright (c) 2023 Mathias Behrle
  * All rights reserved.
  * 
  * This software is copyrighted work licensed under the terms of the
@@ -14,6 +15,7 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,6 +40,7 @@ import de.willuhn.jameica.hbci.paypal.domain.PayerInfo;
 import de.willuhn.jameica.hbci.paypal.domain.PayerName;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionDetails;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionInfo;
+import de.willuhn.jameica.hbci.paypal.synchronize.PaypalTcodes;
 import de.willuhn.jameica.hbci.paypal.transport.ApiException;
 import de.willuhn.jameica.hbci.paypal.transport.TransportService;
 import de.willuhn.jameica.hbci.rmi.HibiscusAddress;
@@ -62,7 +65,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
 {
   private final static I18N i18n = Application.getPluginLoader().getPlugin(Plugin.class).getResources().getI18N();
   private final static Settings settings = Application.getPluginLoader().getPlugin(HBCI.class).getResources().getSettings();
-  
+
   @Resource private TransportService transportService;
 
   /**
@@ -391,6 +394,31 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     
     if (ec != null)
     {
+      HashMap<String, String> debit_tcode_map = PaypalTcodes.getDebitTcodesMap();
+      HashMap<String, String> credit_tcode_map = PaypalTcodes.getCreditTcodesMap();
+
+      String tcode_desc = "";
+      int amount = (int) value.doubleValue();
+      if (amount < 0 ) {
+        tcode_desc = getTcodeDesc(ec, credit_tcode_map);
+      } else {
+        tcode_desc = getTcodeDesc(ec, debit_tcode_map);
+      }
+
+      String comment = umsatz.getKommentar();
+      StringBuilder ec_desc = new StringBuilder();
+      if (comment != null)
+        ec_desc.append(comment);
+
+      if (tcode_desc != null)
+      {
+        if (ec_desc.length() > 0)
+          ec_desc.append(" ");
+        ec_desc.append(tcode_desc);
+      }
+
+      umsatz.setKommentar(ec_desc.toString());
+
       if (ec.startsWith("T04"))
       {
         e.setName(i18n.tr("Bankkonto"));
@@ -451,10 +479,12 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       Umsatz umsatz2 = (Umsatz) de.willuhn.jameica.hbci.Settings.getDBService().createObject(Umsatz.class,null);
       result.add(umsatz2);
       umsatz2.setTransactionId(ti.transaction_id + "-fee");
+      umsatz2.setArt(clean(ec) + "-fee");
       umsatz2.setCustomerRef(t.payer_info != null ? t.payer_info.account_id : null);
       umsatz2.setBetrag(ti.fee_amount.doubleValue());
       umsatz2.setZweck(feeZweck);
       umsatz2.setGegenkonto(e);
+      umsatz2.setKommentar("Fee for " + umsatz.getKommentar());
       
       Money saldo2 = ti.ending_balance;
       if (saldo2 != null)
@@ -514,4 +544,16 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     return start;
   }
 
+  /**
+   * Ermittelt die Beschreibung fuer einen Paypal Transaktionscode.
+   * @param tcode der TCode.
+   * @param map die zu verwendene Map
+   * @return die Beschreibung.
+   */
+  private static String getTcodeDesc(String tcode, HashMap<String, String> map)
+  {
+	String desc = map.get(tcode);
+	String[] splitted = desc.split("\\|");
+	return splitted[0];
+  }
 }
