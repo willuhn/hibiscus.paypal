@@ -15,7 +15,6 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -40,7 +39,6 @@ import de.willuhn.jameica.hbci.paypal.domain.PayerInfo;
 import de.willuhn.jameica.hbci.paypal.domain.PayerName;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionDetails;
 import de.willuhn.jameica.hbci.paypal.domain.TransactionInfo;
-import de.willuhn.jameica.hbci.paypal.synchronize.PaypalTcodes;
 import de.willuhn.jameica.hbci.paypal.transport.ApiException;
 import de.willuhn.jameica.hbci.paypal.transport.TransportService;
 import de.willuhn.jameica.hbci.rmi.HibiscusAddress;
@@ -394,30 +392,21 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     
     if (ec != null)
     {
-      HashMap<String, String> debit_tcode_map = PaypalTcodes.getDebitTcodesMap();
-      HashMap<String, String> credit_tcode_map = PaypalTcodes.getCreditTcodesMap();
-
-      String tcode_desc = "";
-      int amount = (int) value.doubleValue();
-      if (amount < 0 ) {
-        tcode_desc = getTcodeDesc(ec, credit_tcode_map);
-      } else {
-        tcode_desc = getTcodeDesc(ec, debit_tcode_map);
-      }
-
-      String comment = umsatz.getKommentar();
-      StringBuilder ec_desc = new StringBuilder();
+      final StringBuilder ecDesc = new StringBuilder();
+      final String comment = umsatz.getKommentar();
       if (comment != null)
-        ec_desc.append(comment);
-
-      if (tcode_desc != null)
+        ecDesc.append(comment);
+      
+      final String tcodeDesc = this.getTcodeDescription(ec,value);
+      if (tcodeDesc != null)
       {
-        if (ec_desc.length() > 0)
-          ec_desc.append(" ");
-        ec_desc.append(tcode_desc);
+        if (ecDesc.length() > 0)
+          ecDesc.append(" ");
+        ecDesc.append(tcodeDesc);
       }
 
-      umsatz.setKommentar(ec_desc.toString());
+      if (ecDesc.length() > 0)
+        umsatz.setKommentar(ecDesc.toString());
 
       if (ec.startsWith("T04"))
       {
@@ -547,13 +536,15 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
   /**
    * Ermittelt die Beschreibung fuer einen Paypal Transaktionscode.
    * @param tcode der TCode.
-   * @param map die zu verwendene Map
-   * @return die Beschreibung.
+   * @param value der Betrag.
+   * @return die Beschreibung oder NULL, wenn keine gefunden wurde.
    */
-  private static String getTcodeDesc(String tcode, HashMap<String, String> map)
+  private String getTcodeDescription(String tcode, Money value)
   {
-	String desc = map.get(tcode);
-	String[] splitted = desc.split("\\|");
-	return splitted[0];
+    if (value == null)
+      return null;
+    
+    final double d = value.doubleValue();
+    return (d >= 0.01) ? PaypalTcodes.getDebitDescription(tcode) : PaypalTcodes.getCreditDescription(tcode);
   }
 }
