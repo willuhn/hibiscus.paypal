@@ -1,6 +1,7 @@
 /**********************************************************************
  *
  * Copyright (c) 2022 Olaf Willuhn
+ * Copyright (c) 2023 Mathias Behrle
  * All rights reserved.
  * 
  * This software is copyrighted work licensed under the terms of the
@@ -62,7 +63,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
 {
   private final static I18N i18n = Application.getPluginLoader().getPlugin(Plugin.class).getResources().getI18N();
   private final static Settings settings = Application.getPluginLoader().getPlugin(HBCI.class).getResources().getSettings();
-  
+
   @Resource private TransportService transportService;
 
   /**
@@ -338,14 +339,22 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     final List<String> usages = new ArrayList<>();
     if (StringUtils.trimToNull(ti.transaction_subject) != null)
       usages.add(ti.transaction_subject);
-    if (StringUtils.trimToNull(ti.transaction_note) != null && (StringUtils.trimToNull(ti.transaction_subject) == null || !ti.transaction_note.equals(ti.transaction_subject)))
+    if (StringUtils.trimToNull(ti.transaction_note) != null && (StringUtils.trimToNull(ti.transaction_subject) == null || !ti.transaction_note.trim().equals(ti.transaction_subject.trim())))
       usages.add(ti.transaction_note);
     if (t.cart_info != null && t.cart_info.item_details != null && !t.cart_info.item_details.isEmpty())
     {
       for (CartItemDetail cd:t.cart_info.item_details)
       {
         if (StringUtils.trimToNull(cd.item_name) != null)
-          usages.add(cd.item_name);
+        {
+          if (!usages.isEmpty())
+          {
+            if (!usages.contains(cd.item_name))
+              usages.add(", " + cd.item_name);
+          }
+          else
+            usages.add(cd.item_name);
+        }
       }
     }
     
@@ -356,7 +365,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     
     final String email = pi != null ? pi.email_address : null;
     if (email != null)
-      e.setIban(email);
+      e.setIban(email.substring(0, Math.min(40, email.length())));
     
     final PayerName pn = pi != null ? pi.payer_name : null;
     if (pn != null)
@@ -386,6 +395,22 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     
     if (ec != null)
     {
+      final StringBuilder ecDesc = new StringBuilder();
+      final String comment = umsatz.getKommentar();
+      if (comment != null)
+        ecDesc.append(comment);
+      
+      final String tcodeDesc = this.getTcodeDescription(ec,value);
+      if (tcodeDesc != null)
+      {
+        if (ecDesc.length() > 0)
+          ecDesc.append(" ");
+        ecDesc.append(tcodeDesc);
+      }
+
+      if (ecDesc.length() > 0)
+        umsatz.setKommentar(ecDesc.toString());
+
       if (ec.startsWith("T04"))
       {
         e.setName(i18n.tr("Bankkonto"));
@@ -441,6 +466,8 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
           }
       }
     }
+    
+    
     umsatz.setGegenkonto(e);
     //
     ////////////////////////////////////////////////////////////////////////////
@@ -458,10 +485,12 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       Umsatz umsatz2 = (Umsatz) de.willuhn.jameica.hbci.Settings.getDBService().createObject(Umsatz.class,null);
       result.add(umsatz2);
       umsatz2.setTransactionId(ti.transaction_id + "-fee");
+      umsatz2.setArt(clean(ec) + "-fee");
       umsatz2.setCustomerRef(t.payer_info != null ? t.payer_info.account_id : null);
       umsatz2.setBetrag(ti.fee_amount.doubleValue());
       umsatz2.setZweck(feeZweck);
       umsatz2.setGegenkonto(e);
+      umsatz2.setKommentar("Fee for " + umsatz.getKommentar());
       
       Money saldo2 = ti.ending_balance;
       if (saldo2 != null)
@@ -520,5 +549,19 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     Logger.info("startdate: " + HBCI.LONGDATEFORMAT.format(start));
     return start;
   }
-  
+
+  /**
+   * Ermittelt die Beschreibung fuer einen Paypal Transaktionscode.
+   * @param tcode der TCode.
+   * @param value der Betrag.
+   * @return die Beschreibung oder NULL, wenn keine gefunden wurde.
+   */
+  private String getTcodeDescription(String tcode, Money value)
+  {
+    if (value == null)
+      return null;
+    
+    final double d = value.doubleValue();
+    return (d >= 0.01) ? PaypalTcodes.getDebitDescription(tcode) : PaypalTcodes.getCreditDescription(tcode);
+  }
 }
