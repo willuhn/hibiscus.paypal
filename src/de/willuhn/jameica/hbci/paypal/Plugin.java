@@ -33,7 +33,11 @@ public class Plugin extends AbstractPlugin
    */
   public final static String META_PARAM_API_SECRET = "API Secret";
 
-
+  /**
+   * Meta-Parameter für Import-Auswahl
+   */
+  public final static String META_PARAM_IMPORT_AUTHORIZATIONS = "Authorisierungen importieren (true/false)";
+  
   /**
    * Liefert den Support-Status des Kontos.
    * @param konto das zu pruefende Konto.
