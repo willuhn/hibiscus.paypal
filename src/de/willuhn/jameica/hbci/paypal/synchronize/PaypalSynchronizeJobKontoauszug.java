@@ -294,6 +294,9 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
    */
   private List<Umsatz> convert(TransactionDetails t) throws Exception
   {
+    final Konto k = (Konto) this.getContext(CTX_ENTITY);
+    boolean importAuthorizations = "true".equals(k.getMeta(Plugin.META_PARAM_IMPORT_AUTHORIZATIONS, "true"));
+    
     final TransactionInfo ti = t.transaction_info;
     if (ti == null)
     {
@@ -446,7 +449,21 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
             usages.add(0, i18n.tr("Rückzahlung "));
           
           feeZweck = i18n.tr("Widerrufene ") + feeZweck;
+        } else if (ec.equals("T1105"))
+        {
+          usages.clear();
+          usages.add(i18n.tr("Aufhebung der Authorisierungssperre"));
+          if (!importAuthorizations) {
+            result.clear();
+          }
         }
+      } else if (ec.equals("T1501"))
+      {
+          usages.clear();
+          usages.add(i18n.tr("Sperre für Authorisierung"));
+          if (!importAuthorizations) {
+            result.clear();
+          }
       }
     }
     
