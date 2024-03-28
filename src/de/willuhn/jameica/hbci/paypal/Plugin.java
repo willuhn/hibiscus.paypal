@@ -36,7 +36,7 @@ public class Plugin extends AbstractPlugin
   /**
    * Meta-Parameter für Import-Auswahl
    */
-  public final static String META_PARAM_IMPORT_AUTHORIZATIONS = "Authorisierungen importieren (true/false)";
+  public final static String META_PARAM_IMPORT_AUTHORIZATIONS = "Authorisierungsbuchungen importieren (true/false)";
   
   /**
    * Liefert den Support-Status des Kontos.
