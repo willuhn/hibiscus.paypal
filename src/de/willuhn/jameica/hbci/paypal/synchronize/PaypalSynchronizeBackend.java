@@ -134,7 +134,7 @@ public class PaypalSynchronizeBackend extends AbstractSynchronizeBackend<PaypalS
     if (!Plugin.getStatus(konto).checkSyncProvider())
       return null;
     
-    return Arrays.asList(Plugin.META_PARAM_API_CLIENTID, Plugin.META_PARAM_API_SECRET, Plugin.META_PARAM_IMPORT_AUTHORIZATIONS);
+    return Arrays.asList(Plugin.META_PARAM_API_CLIENTID, Plugin.META_PARAM_API_SECRET, Plugin.META_PARAM_IMPORT_AUTHORIZATIONS+"(true/false)");
   }
 
   /**
