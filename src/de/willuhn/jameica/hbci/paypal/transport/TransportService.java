@@ -72,7 +72,7 @@ public class TransportService
   private final static Settings settings = Application.getPluginLoader().getPlugin(Plugin.class).getResources().getSettings();
   private final static I18N i18n = Application.getPluginLoader().getPlugin(Plugin.class).getResources().getI18N();
   
-  public final static String DF_ISO8601 = "yyyy-MM-dd'T'HH:mm:ssZ";
+  public final static String DF_ISO8601 = "yyyy-MM-dd'T'HH:mm:ssX";
   public final static String DF_ISO8601_SALDO = "yyyy-MM-dd'T'HH:mm:ss";
   
   private CloseableHttpClient client = null;
