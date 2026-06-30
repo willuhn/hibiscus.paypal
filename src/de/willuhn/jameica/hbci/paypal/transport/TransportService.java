@@ -169,31 +169,34 @@ public class TransportService
   {
     if (start == null)
       throw new ApplicationException("Kein Startdatum angegeben");
-    List<TransactionDetails> result = new ArrayList<>();
+
+    final List<TransactionDetails> result = new ArrayList<>();
+    final ZonedDateTime now = ZonedDateTime.now();
+
     ZonedDateTime startDate = start.toInstant().atZone(ZoneId.systemDefault());
-    do
+    
+    while (startDate.isBefore(now))
     {
+      // Wir dürfen die Umsätze nur in 30-Tage-Schritten abrufen.
+      final ZonedDateTime plus30Days = startDate.plusDays(30);
+      final ZonedDateTime endDate = (plus30Days.isAfter(now)) ? now : plus30Days;
+
       final Map<String, String> params = new HashMap<>();
       params.put("start_date", startDate.format(DateTimeFormatter.ofPattern(DF_ISO8601)));
-      if (startDate.plusDays(30).isAfter(ZonedDateTime.now()))
-      {
-	params.put("end_date", ZonedDateTime.now().format(DateTimeFormatter.ofPattern(DF_ISO8601)));
-      } else
-      {
-	params.put("end_date", startDate.plusDays(30).format(DateTimeFormatter.ofPattern(DF_ISO8601)));
-      }
+      params.put("end_date", endDate.format(DateTimeFormatter.ofPattern(DF_ISO8601)));
       params.put("balance_affecting_records_only", "Y");
       params.put("fields", "all");
       params.put("page", "1");
       params.put("page_size", "500");
       final HttpGet get = this.createGet(this.createUri("/v1/reporting/transactions", params));
-      TransactionResult transactionResult = request(get, auth, TransactionResult.class);
+      
+      final TransactionResult transactionResult = request(get, auth, TransactionResult.class);
       if (transactionResult != null && transactionResult.transaction_details != null)
-      {
-	result.addAll(transactionResult.transaction_details);
-      }
-      startDate = startDate.plusDays(30);
-    } while (startDate.isBefore(ZonedDateTime.now()));
+        result.addAll(transactionResult.transaction_details);
+      
+      startDate = plus30Days;
+    }
+    
     return result;
   }
   
@@ -313,17 +316,22 @@ public class TransportService
           Logger.error("got http status: " + msg);
           Logger.error("json response: " + json);
           
-          // Checken, ob wir den Fehler lesen koennen
+          ApiException error = null;
+          
+          // Für den Fall, dass wir das Fehlerobjekt nicht aus dem JSON lesen können
           try
           {
-            ApiException error = this.mapper.readValue(json, ApiException.class);
-            error.httpStatus = status;
-            error.httpMessage = response.getReasonPhrase();
-            return error;
+            error = this.mapper.readValue(json, ApiException.class);
           }
           catch (Exception e)
           {
+            Logger.error("unable to read error message from json",e);
+            error = new ApiException();
           }
+          
+          error.httpStatus = status;
+          error.httpMessage = response.getReasonPhrase();
+          return error;
         }
         return this.mapper.readValue(json, type);
       });
