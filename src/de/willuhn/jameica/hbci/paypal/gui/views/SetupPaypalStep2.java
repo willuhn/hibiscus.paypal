@@ -128,7 +128,7 @@ public class SetupPaypalStep2 extends AbstractSetupPaypal
     }
     else
     {
-      info.setText(i18n.tr("Die API Client-ID des Kontos ist korrekt konfiguriert.\n" +
+      info.setText(i18n.tr("Die API Client-ID des Kontos ist konfiguriert.\n" +
                            "Prüfen Sie bitte ggf. die Korrektheit der API Client-ID."));
     }
     info.setUrl("https://www.willuhn.de/wiki/doku.php?id=support:hibiscus.paypal");
