@@ -327,7 +327,10 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
     
     Money saldo = ti.ending_balance;
     if (saldo != null)
-      umsatz.setSaldo(saldo.doubleValue());
+    {
+      double fee = ti.fee_amount != null ? ti.fee_amount.doubleValue() : 0.0;
+      umsatz.setSaldo(saldo.doubleValue() - fee);
+    }
 
     Money value = ti.transaction_amount;
     if (value != null)
@@ -494,7 +497,7 @@ public class PaypalSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug i
       
       Money saldo2 = ti.ending_balance;
       if (saldo2 != null)
-        umsatz2.setSaldo(saldo2.doubleValue() + ti.fee_amount.doubleValue()); // Fee ist schon eine negative Zahl, daher sinkt der Saldo
+        umsatz2.setSaldo(saldo2.doubleValue());
 
       umsatz2.setDatum(ti.transaction_updated_date);
       umsatz2.setValuta(ti.transaction_updated_date);
